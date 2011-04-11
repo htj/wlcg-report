@@ -28,10 +28,12 @@ Generate tier report.
 
 """
 
+import sys
 import time
 import json
 import logging
 import calendar
+import subprocess
 from optparse import OptionParser
 
 import psycopg2
@@ -52,8 +54,8 @@ FINLAND_TIER2   = 'FI_HIP_T2'
 
 
 RECORD_COMPARE = lambda r1, r2: cmp(
-    (r1.get(dataprocess.TIER), r1.get(dataprocess.VO_NAME), r1.get(dataprocess.USER)),
-    (r2.get(dataprocess.TIER), r2.get(dataprocess.VO_NAME), r2.get(dataprocess.USER))
+    (r1.get(dataprocess.TIER), r1.get(dataprocess.VO_NAME), r1.get(dataprocess.USER), r1.get(dataprocess.VO_GROUP), r1.get(dataprocess.VO_ROLE) ),
+    (r2.get(dataprocess.TIER), r2.get(dataprocess.VO_NAME), r2.get(dataprocess.USER), r2.get(dataprocess.VO_GROUP), r2.get(dataprocess.VO_ROLE) )
 )
 
 
@@ -133,6 +135,19 @@ def fetchData(host, db, username, password, start_date, end_date):
 
 
 
+def encryptUserSN(usersn):
+
+    cmd = './apel-crypt'
+    args = [cmd, usersn]
+
+    p = subprocess.Popen(args, stdout=subprocess.PIPE)
+    p.wait()
+    encrypted_usersn = p.stdout.read().strip()
+
+    return encrypted_usersn
+
+
+
 def encryptEntries(entries):
     """
     Encrypts the usersn in entries, as required by APEL.
@@ -161,6 +176,12 @@ def createReport(db_records, tier_mapping, tier_ratio, default_tier, interactive
     wlcg_records = dataprocess.tierMergeSplit(wlcg_records, tier_mapping, tier_ratio, default_tier)
     # could add user here if we want short tier reports
     wlcg_records = dataprocess.collapseFields(wlcg_records, ( dataprocess.YEAR, dataprocess.MONTH, dataprocess.HOST, ) )
+
+    # hack aliprod name to work with the apel system
+    for r in wlcg_records:
+        if r[dataprocess.USER] == 'aliprod':
+            r[dataprocess.USER] = '/aliprod'
+
     if not interactive:
         wlcg_records = encryptEntries(wlcg_records)
     return wlcg_records
@@ -295,7 +316,6 @@ def main():
         pm_date_start, pm_date_end = generateStartEndDates(pm_year, pm_month)
 
         pm_db_records = fetchData(db_host, db_name, db_username, db_password, pm_date_start, pm_date_end)
-
         pm_records = createReport(db_records, tier_mapping, tier_ratio, default_tier)
         pm_records = [ formatRecord(e, year, month, date_start, date_end) for e in sorted(records, RECORD_COMPARE) ]
 
@@ -303,7 +323,6 @@ def main():
     date_start, date_end = generateStartEndDates(year, month)
 
     db_records = fetchData(db_host, db_name, db_username, db_password, date_start, date_end)
-
     records = createReport(db_records, tier_mapping, tier_ratio, default_tier, options.interactive)
     records = [ formatRecord(e, year, month, date_start, date_end) for e in sorted(records, RECORD_COMPARE) ]
 
