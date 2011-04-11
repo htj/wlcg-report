@@ -1,0 +1,333 @@
+#!/usr/bin/env python
+
+"""
+WCLG report generator (reports to the APEL system)
+
+Author: Henrik Thostrup Jensen <htj@ndgf.org>
+Copyright: Nordic Data Grid Facility (2009-2011)
+
+Unlike the old apel-reporter, this script uses the wlcgsgas library.
+
+
+Usage examples:
+
+./apel-report
+Use whatever is defined in config.json and generate report for the current year+month
+
+./apel-report -y 2010 -m 01
+Generate report for january 2010
+
+./apel-report -y 2010 -m 01 -i
+Generate report for january 2010 and display the content to the terminal (does not report)
+
+./apel-report -c otherconfig.json
+Use otherconfig.json as config file.
+
+./apel-report -t
+Generate tier report.
+
+"""
+
+import time
+import json
+import logging
+import calendar
+from optparse import OptionParser
+
+import psycopg2
+
+from wlcgsgas import query as wlcgquery, dataprocess
+
+
+
+DEFAULT_CONFIG_FILE = 'wlcgreport.json'
+DEFAULT_LOG_FILE    = '/var/log/wlcg-reporter.log'
+
+DAY_OVERLAP = 3  # day into a month for doing report for previous month
+
+NDGF_TIER1      = 'NDGF-T1'
+NORWAY_TIER2    = 'NO-NORGRID-T2'
+SWEDEN_TIER2    = 'SE-SNIC-T2'
+FINLAND_TIER2   = 'FI_HIP_T2'
+
+
+RECORD_COMPARE = lambda r1, r2: cmp(
+    (r1.get(dataprocess.TIER), r1.get(dataprocess.VO_NAME), r1.get(dataprocess.USER)),
+    (r2.get(dataprocess.TIER), r2.get(dataprocess.VO_NAME), r2.get(dataprocess.USER))
+)
+
+
+
+def createParser():
+
+    gmt = time.gmtime()
+    d_year  = gmt.tm_year
+    d_month = gmt.tm_mon
+
+    parser = OptionParser()
+    parser.add_option('-i', '--interactive', dest='interactive',
+                      help='Run in interactive mode (no registrations are performed', default=False, action='store_true')
+    parser.add_option('-t', '--tier',   dest='tierreport', help='Generate tier report', default=False, action='store_true')
+    parser.add_option('-c', '--config', dest='config',     help='Configuration file', metavar='FILE', default=DEFAULT_CONFIG_FILE )
+    parser.add_option('-l', '--logfile',dest='logfile',    help='Log file', metavar='FILE', default=DEFAULT_LOG_FILE)
+    parser.add_option('-y', '--year',   dest='year',       help='Report generation year',  default=d_year, type=int)
+    parser.add_option('-m', '--month',  dest='month',      help='Report generation month', default=d_month, type=int)
+
+    return parser
+
+
+
+def loadConfig(filename=DEFAULT_CONFIG_FILE):
+
+    f = open(filename)
+    try:
+        cfg = json.load(f)
+    except ValueError, e:
+        logging.error("Error parsing configuration file (%s)", str(e))
+        sys.exit(2)
+
+    f.close()
+    return cfg
+
+
+
+def nMonthDays(year, month):
+
+    if calendar.isleap(int(year)) and month == '02':
+        return 29
+    else:
+        return calendar.mdays[int(month)]
+
+
+
+def generateStartEndDates(year, month):
+
+    # if reporting for the current month, use the current day
+    # otherwise use the last day of the month
+
+    current_time = time.gmtime()
+
+    if current_time.tm_year == year and current_time.tm_mon == month:
+        day = current_time.tm_mday
+    else:
+        day = nMonthDays(year, month)
+
+    date_start = '%s-%s-%s' % (year, month, '1')
+    date_end   = '%s-%s-%s' % (year, month, day)
+
+    return date_start, date_end
+
+
+
+def fetchData(host, db, username, password, start_date, end_date):
+
+    conn = psycopg2.connect(host=host, database=db, user=username, password=password)
+
+    cur = conn.cursor()
+    cur.execute(wlcgquery.WLCG_QUERY, (start_date, end_date) )
+    rows = cur.fetchall()
+
+    conn.close()
+
+    return rows
+
+
+
+def encryptEntries(entries):
+    """
+    Encrypts the usersn in entries, as required by APEL.
+    """
+    logging.info('Encrypting %i entries.', len(entries))
+
+    encrypted_entries = []
+
+    for entry in entries:
+        ec = entry.copy()
+        ec[dataprocess.USER] = encryptUserSN(entry[dataprocess.USER])
+        encrypted_entries.append(ec)
+        sys.stdout.write('.')
+        sys.stdout.flush()
+    sys.stdout.write('\n')
+    sys.stdout.flush()
+
+    return encrypted_entries
+
+
+
+def createReport(db_records, tier_mapping, tier_ratio, default_tier, interactive):
+
+    wlcg_records = dataprocess.rowsToDicts(db_records)
+    wlcg_records = dataprocess.addMissingScaleValues(wlcg_records)
+    wlcg_records = dataprocess.tierMergeSplit(wlcg_records, tier_mapping, tier_ratio, default_tier)
+    # could add user here if we want short tier reports
+    wlcg_records = dataprocess.collapseFields(wlcg_records, ( dataprocess.YEAR, dataprocess.MONTH, dataprocess.HOST, ) )
+    if not interactive:
+        wlcg_records = encryptEntries(wlcg_records)
+    return wlcg_records
+
+
+
+def formatRecord(record, year, month, date_start, date_end, tier_report=False):
+    """
+    Given a record and auxillary information, this function returns a string
+    containing a row suitable for insertion into APEL.
+    """
+
+    addQuotes = lambda s : "'" + s + "'"
+
+    rd = {}
+
+    rd[dataprocess.TIER]        = addQuotes(record[dataprocess.TIER])
+    rd[dataprocess.VO_NAME]     = addQuotes(record[dataprocess.VO_NAME])
+    rd[dataprocess.USER]        = addQuotes(record[dataprocess.USER])
+    rd[dataprocess.VO_GROUP]    = addQuotes(record[dataprocess.VO_GROUP])  if record[dataprocess.VO_GROUP]  else "''"
+    rd[dataprocess.VO_ROLE]     = addQuotes(record[dataprocess.VO_ROLE])   if record[dataprocess.VO_ROLE]   else "''"
+
+    rd[dataprocess.N_JOBS]      = int(record[dataprocess.N_JOBS])
+    rd[dataprocess.CPU_TIME]    = int(record[dataprocess.CPU_TIME])
+    rd[dataprocess.WALL_TIME]   = int(record[dataprocess.WALL_TIME])
+    rd[dataprocess.KSI2K_CPU_TIME]  = int(record[dataprocess.KSI2K_CPU_TIME]) if record[dataprocess.KSI2K_CPU_TIME]  is not None else 'null'
+    rd[dataprocess.KSI2K_WALL_TIME] = int(record[dataprocess.KSI2K_WALL_TIME]) if record[dataprocess.KSI2K_WALL_TIME] is not None else 'null'
+    rd[dataprocess.MONTH]       = month
+    rd[dataprocess.YEAR]        = year
+    rd[dataprocess.DATE_START]  = addQuotes(date_start)
+    rd[dataprocess.DATE_END]    = addQuotes(date_end)
+
+    base = '''%(tier)s, %(vo_name)s, %(user)s, %(vo_group)s, %(vo_role)s, ''' + \
+           '''%(n_jobs)i, %(cpu_time)s, %(ksi2k_cpu_time)s, %(wall_time)s, %(ksi2k_wall_time)s, ''' + \
+           '''%(month)s, %(year)s, %(date_start)s, %(date_end)s'''
+
+    s = base % rd
+    return s
+
+
+
+def createDatabaseStatements(records, year, month):
+
+    USER_INSERT_TEMPLATE = 'INSERT INTO SGAS_DATA_USER VALUES (%s);'
+    USER_DELETE_TEMPLATE = 'DELETE FROM SGAS_DATA_USER WHERE year = %i AND month = %i;'
+
+    stmts = []
+    stmts.append(USER_DELETE_TEMPLATE % (year, month))
+    for rec in records:
+        stmts.append(USER_INSERT_TEMPLATE % rec)
+    return stmts
+
+
+
+def doDatabaseInsertion(statements):
+
+    import MySQLdb as mysql
+    logging.info('Issuing update to APEL database')
+
+    connection = None
+    try:
+        connection = mysql.connect(read_default_file='~/.my.cnf-apel')
+        cursor = connection.cursor()
+        for stm in statements:
+            cursor.execute(stm)
+        cursor.close()
+        connection.commit()
+        logging.info('Database successfully updated. Executed %i statements', len(statements))
+
+    except mysql.Error, e:
+        logging.error("MySQL Error: %s", str(e))
+        #logging.exception(e)
+        if connection is not None:
+            connection.rollback()
+
+    finally:
+        if connection is not None:
+            connection.close()
+
+
+
+def main():
+
+    parser = createParser()
+    options, args = parser.parse_args()
+
+    if args:
+        print "Auxillary arguments (%s) not understood, exiting." % ','.join(args)
+        sys.exit(1)
+
+    if options.interactive:
+        logging.basicConfig(format='%(message)s', level=logging.INFO)
+    else:
+        logging.basicConfig(filename=options.logfile,
+                            format='%(asctime)s %(levelname)s %(message)s',
+                            level=logging.INFO)
+        logging.info('== APEL Reporter invoked ==')
+
+    cfg = loadConfig(options.config)
+    default_tier, tier_mapping, tier_ratio = cfg['default-tier'], cfg['tier-mapping'], cfg['tier-ratio']
+
+    db_host = cfg.get('db-host', 'localhost')
+    db_name = cfg.get('db-name', 'sgas')
+    db_username = cfg.get('db-username')
+    db_password = cfg.get('db-password')
+
+    if db_username is None or db_password is None:
+        logging.error("Database login (username and/or password) is not specified in config file.")
+        sys.exit(1)
+
+    tier_report = options.tierreport
+    year  = options.year
+    month = options.month
+
+    if not options.interactive:
+        if year < 2010 or year > 2013:
+            logging.error('Time appear to have warped at the machine. Cowardly bailing out.')
+            sys.exit(4)
+
+    encrypt = not tier_report and not options.interactive
+
+    # options ready, start data fetching
+
+    current_time = time.gmtime()
+
+    report_prev_month = (not options.interactive) and current_time.tm_mday <= DAY_OVERLAP
+
+
+    if report_prev_month:
+        logging.info('Generating report for previous month')
+        pm_year, pm_month = previousMonth(year, month)
+        pm_date_start, pm_date_end = generateStartEndDates(pm_year, pm_month)
+
+        pm_db_records = fetchData(db_host, db_name, db_username, db_password, pm_date_start, pm_date_end)
+
+        pm_records = createReport(db_records, tier_mapping, tier_ratio, default_tier)
+        pm_records = [ formatRecord(e, year, month, date_start, date_end) for e in sorted(records, RECORD_COMPARE) ]
+
+    # -- current month
+    date_start, date_end = generateStartEndDates(year, month)
+
+    db_records = fetchData(db_host, db_name, db_username, db_password, date_start, date_end)
+
+    records = createReport(db_records, tier_mapping, tier_ratio, default_tier, options.interactive)
+    records = [ formatRecord(e, year, month, date_start, date_end) for e in sorted(records, RECORD_COMPARE) ]
+
+    if options.interactive:
+        for r in records:
+            print r
+
+    # ---
+
+    else:
+        statements = []
+        if report_prev_month:
+            statements += createDatabaseStatements(prev_db_records, prev_year, prev_month);
+        statements += createDatabaseStatements(records, year, month)
+        # this should probably be changed, log is quite difficult to read
+        logging.info('Will issue %i statements' % len(statements))
+        doDatabaseInsertion(statements)
+
+    if not options.interactive:
+        logging.info('== APEL Reporter finished ==')
+
+
+
+
+if __name__ == '__main__':
+    main()
+

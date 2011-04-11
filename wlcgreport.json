@@ -1,0 +1,59 @@
+{
+    "db-host"     : "dbhost",
+    "db-name"     : "dbname",
+    "db-username" : "dbuser",
+    "db-password" : "dbpass",
+
+    "default-tier"                      : "NDGF-T1",
+
+    "tier-mapping" : {
+        "titan.uio.no"                  : "NO-NORGRID-T2",
+        "ce01.titan.uio.no"             : "NO-NORGRID-T2",
+        "ce02.titan.uio.no"             : "NO-NORGRID-T2",
+        "arc.bccs.uib.no"               : "NO-NORGRID-T2",
+        "grid.bccs.uib.no"              : "NO-NORGRID-T2",
+        "norgrid.bccs.no"               : "NO-NORGRID-T2",
+        "grid.uio.no"                   : "NO-NORGRID-T2",
+        "fimm.bccs.uib.no"              : "NO-NORGRID-T2",
+
+        "ingrid-h.hpc2n.umu.se"         : "SE-SNIC-T2",
+        "ingrid-i.hpc2n.umu.se"         : "SE-SNIC-T2",
+        "siri.lunarc.lu.se"             : "SE-SNIC-T2",
+        "svea.c3se.chalmers.se"         : "SE-SNIC-T2",
+        "smokerings.nsc.liu.se"         : "SE-SNIC-T2",
+        "arc-ce.smokerings.nsc.liu.se"  : "SE-SNIC-T2",
+        "jeannedarc.hpc2n.umu.se"       : "SE-SNIC-T2",
+        "grad1.uppmax.uu.se"            : "SE-SNIC-T2",
+        "arc-ce01.pdc.kth.se"           : "SE-SNIC-T2",
+        "grad.uppmax.uu.se"             : "SE-SNIC-T2",
+
+        "benedict.grid.aau.dk"          : "NDGF-T1",
+        "fyrgrid.grid.aau.dk"           : "NDGF-T1",
+        "gateway01.dcsc.ku.dk"          : "NDGF-T1",
+
+        "sepeli.csc.fi"                 : "CSC",
+        "ametisti.grid.helsinki.fi"     : "CSC",
+        "korundi.grid.helsinki.fi"      : "CSC",
+        "jade-cms.hip.fi"               : "CSC",
+
+        "alice.lunarc.lu.se"            : "SE-SNIC-T2",
+        "alien-ce.smokerings.nsc.liu.se": "SE-SNIC-T2",
+        "alice-vobox.csc.fi"            : "CSC",
+
+        "LUNARC"                        : "SE-SNIC-T2",
+        "NSC"                           : "SE-SNIC-T2",
+        "UiB"                           : "NO-NORGRID-T2"
+    },
+
+    "tier-ratio" : [
+        [{"tier": "NO-NORGRID-T2", "vo_name": "atlas", "vo_role": "production"}, 0.38],
+        [{"tier": "NO-NORGRID-T2", "vo_name": "alice"}                         , 0   ],
+        [{"tier": "SE-SNIC-T2",    "vo_name": "atlas", "vo_role": "production"}, 0.49],
+        [{"tier": "SE-SNIC-T2",    "vo_name": "alice"}                         , 0.49],
+        [{"tier": "CSC",           "vo_name": "cms"}                           , 1],
+        [{"tier": "CSC",           "vo_name": "alice"}                         , 0]
+    ]
+
+}
+
+

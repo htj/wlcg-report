@@ -1,0 +1,4 @@
+#!/bin/sh
+
+java -classpath /usr/share/java/bcprov.jar:. ApelEncrypter "$1"
+
