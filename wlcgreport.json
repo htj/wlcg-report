@@ -31,18 +31,21 @@
         "fyrgrid.grid.aau.dk"           : "NDGF-T1",
         "gateway01.dcsc.ku.dk"          : "NDGF-T1",
 
-        "sepeli.csc.fi"                 : "CSC",
-        "ametisti.grid.helsinki.fi"     : "CSC",
-        "korundi.grid.helsinki.fi"      : "CSC",
-        "jade-cms.hip.fi"               : "CSC",
+        "sepeli.csc.fi"                 : "FI_HIP_T2",
+        "ametisti.grid.helsinki.fi"     : "FI_HIP_T2",
+        "korundi.grid.helsinki.fi"      : "FI_HIP_T2",
+        "jade-cms.hip.fi"               : "FI_HIP_T2",
 
         "alice.lunarc.lu.se"            : "SE-SNIC-T2",
         "alien-ce.smokerings.nsc.liu.se": "SE-SNIC-T2",
-        "alice-vobox.csc.fi"            : "CSC",
+        "alice-vobox.csc.fi"            : "FI_HIP_T2",
 
         "LUNARC"                        : "SE-SNIC-T2",
         "NSC"                           : "SE-SNIC-T2",
-        "UiB"                           : "NO-NORGRID-T2"
+        "UiB"                           : "NO-NORGRID-T2",
+
+        "mon01.grid.lumii.lv"           : "IMCSUL"
+
     },
 
     "tier-ratio" : [
@@ -50,8 +53,8 @@
         [{"tier": "NO-NORGRID-T2", "vo_name": "alice"}                         , 0   ],
         [{"tier": "SE-SNIC-T2",    "vo_name": "atlas", "vo_role": "production"}, 0.49],
         [{"tier": "SE-SNIC-T2",    "vo_name": "alice"}                         , 0.49],
-        [{"tier": "CSC",           "vo_name": "cms"}                           , 1],
-        [{"tier": "CSC",           "vo_name": "alice"}                         , 0]
+        [{"tier": "FI_HIP_T2",     "vo_name": "cms"}                           , 1],
+        [{"tier": "FI_HIP_T2",     "vo_name": "alice"}                         , 0]
     ]
 
 }
